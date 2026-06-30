@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📝 笔记管理 — alphaXiv-Local</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="logo"><a href="/">📚 alphaXiv-Local</a></h1>
+            <span class="subtitle">/ 笔记管理</span>
+            <nav class="nav">
+                <a href="/" class="nav-link">← 博客列表</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="notes-toolbar">
+            <h2>📝 Obsidian 笔记</h2>
+            <span class="count-badge">{{ notes | length }} 条 · Obsidian Vault/文献/</span>
+        </div>
+
+        {% if notes %}
+        <div class="notes-list">
+            {% for note in notes %}
+            <article class="note-card-full">
+                <div class="note-card-header">
+                    <h3>{{ note.title }}</h3>
+                    <span class="note-date">{{ note.modified }}</span>
+                </div>
+                <div class="note-card-content markdown-body note-markdown" id="note-md-{{ loop.index }}">
+                    <script>
+                        (function() {
+                            var el = document.getElementById('note-md-{{ loop.index }}');
+                            var raw = {{ note.preview | tojson | safe }};
+                            // 去掉第一行（可能是重复的标题 frontmatter）
+                            var lines = raw.split('\n');
+                            var start = 0;
+                            for (var i = 0; i < Math.min(lines.length, 5); i++) {
+                                if (lines[i].startsWith('---') || lines[i].startsWith('title:') ||
+                                    lines[i].startsWith('paper:') || lines[i].startsWith('authors:') ||
+                                    lines[i].startsWith('date:') || lines[i].startsWith('tags:')) {
+                                    start = i + 1;
+                                } else if (lines[i].trim() === '') {
+                                    start = i + 1;
+                                } else {
+                                    break;
+                                }
+                            }
+                            el.innerHTML = marked.parse(lines.slice(start).join('\n'));
+                        })();
+                    </script>
+                </div>
+                <div class="note-card-footer">
+                    <span class="note-filename">📄 {{ note.filename }}</span>
+                    <button class="btn btn-sm btn-danger" onclick="deleteNote('{{ note.filepath }}')">🗑 删除</button>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>📭 暂无 Obsidian 笔记</p>
+            <p>在论文详情页中写下笔记，会自动保存到这里。</p>
+        </div>
+        {% endif %}
+    </main>
+
+    <footer class="footer">
+        <p>笔记自动存储到: Obsidian Vault/文献/ | DeepSeek AI 驱动</p>
+    </footer>
+
+    <script>
+        async function deleteNote(filepath) {
+            if (!confirm('确定要删除这条笔记吗？')) return;
+            try {
+                const resp = await fetch(`/api/notes?filepath=${encodeURIComponent(filepath)}`, { method: 'DELETE' });
+                const data = await resp.json();
+                if (data.success) location.reload();
+                else alert('删除失败: ' + data.error);
+            } catch (e) { alert('删除失败: ' + e.message); }
+        }
+    </script>
+</body>
+</html>

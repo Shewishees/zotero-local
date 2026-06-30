@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ paper.title[:60] }} — alphaXiv-Local</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="logo"><a href="/">📚 alphaXiv-Local</a></h1>
+            <span class="subtitle">/ {{ paper.title[:30] }}...</span>
+            <nav class="nav">
+                <a href="/" class="nav-link">← 列表</a>
+                <a href="/notes" class="nav-link">笔记</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main detail-layout">
+        <!-- ========== 左侧主区域 ========== -->
+        <div class="main-panel">
+            <!-- Tab 切换 -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('info')" id="tab-info">📄 论文信息</button>
+                <button class="tab" onclick="switchTab('blog')" id="tab-blog">
+                    📖 AI 博客 {% if blog_content %}<span class="tab-dot"></span>{% endif %}
+                </button>
+            </div>
+
+            <!-- Tab 1: 论文信息 -->
+            <div class="tab-content active" id="content-info">
+                <div class="paper-info-card">
+                    <h2>{{ paper.title }}</h2>
+                    <div class="paper-info-meta">
+                        <p><strong>作者:</strong> {{ paper.authors | join(', ') }}</p>
+                        {% if paper.publication %}<p><strong>来源:</strong> {{ paper.publication }}
+                            {% if paper.volume %}Vol.{{ paper.volume }}{% endif %}
+                            {% if paper.issue %}({{ paper.issue }}){% endif %}
+                            {% if paper.pages %}, pp.{{ paper.pages }}{% endif %}</p>{% endif %}
+                        {% if paper.date %}<p><strong>日期:</strong> {{ paper.date }}</p>{% endif %}
+                        {% if paper.DOI %}<p><strong>DOI:</strong> <a href="https://doi.org/{{ paper.DOI }}" target="_blank">{{ paper.DOI }}</a></p>{% endif %}
+                    </div>
+                    {% if paper.abstract %}
+                    <div class="paper-abstract-full">
+                        <h3>📝 摘要</h3>
+                        <p>{{ paper.abstract }}</p>
+                    </div>
+                    {% endif %}
+
+                    <!-- PDF 预览 -->
+                    <div class="pdf-viewer-section">
+                        <div class="pdf-viewer-header">
+                            <h3>📄 完整 PDF</h3>
+                            <button class="btn btn-sm btn-ghost" onclick="togglePdfViewer()" id="pdf-toggle-btn">
+                                {% if paper.pdf_path %}收起{% else %}无 PDF{% endif %}
+                            </button>
+                        </div>
+                        <div class="pdf-viewer-body" id="pdf-viewer-body">
+                            {% if paper.pdf_path %}
+                            <iframe src="/pdf/{{ paper.key }}" class="pdf-iframe"></iframe>
+                            {% else %}
+                            <p class="no-notes" style="padding:20px">⚠️ 该论文无 PDF 文件</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 标签区域 -->
+                    <div class="tags-section">
+                        <h4>🏷 标签</h4>
+                        <div class="tags-container" id="tags-container">
+                            <span class="tag-loading">加载推荐标签...</span>
+                        </div>
+                        <div class="tags-edit">
+                            <input type="text" id="tag-input" placeholder="添加自定义标签..." class="tag-input">
+                            <button class="btn btn-sm" onclick="addTag()">+</button>
+                            <button class="btn btn-sm btn-ghost" onclick="loadSuggestedTags()">🤖 推荐</button>
+                        </div>
+                    </div>
+
+                    <!-- 生成区域 -->
+                    <div class="generate-section">
+                        <h4>🤖 AI 操作</h4>
+                        <div class="style-selector">
+                            <label class="style-option">
+                                <input type="radio" name="blog-style" value="academic" checked>
+                                <span class="style-label">🎓 学术型</span>
+                            </label>
+                            <label class="style-option">
+                                <input type="radio" name="blog-style" value="storytelling">
+                                <span class="style-label">📖 故事型</span>
+                            </label>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" onclick="generateBlog({{ paper.item_id }})" id="generate-btn">
+                                ✨ 生成博客
+                            </button>
+                            <button class="btn btn-success" onclick="generateQuickNote({{ paper.item_id }})" id="quick-note-btn">
+                                📝 生成精读笔记
+                            </button>
+                        </div>
+                        <div id="action-status" class="action-status"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: AI 博客（含嵌入图片 + 浮动目录） -->
+            <div class="tab-content" id="content-blog">
+                {% if blog_content %}
+                <div class="blog-with-toc">
+                    <nav class="blog-toc" id="blog-toc">
+                        <div class="toc-header">📑 目录</div>
+                        <div class="toc-links" id="toc-links"></div>
+                    </nav>
+                    <div class="blog-content markdown-body" id="blog-content"></div>
+                </div>
+                <script>
+                    var blogHtml = marked.parse({{ blog_content | tojson | safe }});
+                    document.getElementById('blog-content').innerHTML = blogHtml;
+                    // 生成浮动目录
+                    (function() {
+                        var toc = document.getElementById('toc-links');
+                        var content = document.getElementById('blog-content');
+                        var hs = content.querySelectorAll('h2');
+                        if (hs.length === 0) { document.getElementById('blog-toc').style.display = 'none'; return; }
+                        hs.forEach(function(h, i) {
+                            var id = 'sec-' + i;
+                            h.id = id;
+                            var a = document.createElement('a');
+                            a.href = '#' + id;
+                            a.className = 'toc-item';
+                            a.textContent = h.textContent.replace(/^[📑📖🔬📊⚠️💡📝\s]+/, '');
+                            a.onclick = function() { h.scrollIntoView({behavior:'smooth',block:'start'}); return false; };
+                            toc.appendChild(a);
+                        });
+                        // 滚动高亮
+                        var items = toc.querySelectorAll('.toc-item');
+                        window.addEventListener('scroll', function() {
+                            var scrollY = window.scrollY + 120;
+                            var active = null;
+                            hs.forEach(function(h, i) {
+                                if (h.offsetTop <= scrollY) active = i;
+                            });
+                            items.forEach(function(item, i) {
+                                item.classList.toggle('active', i === active);
+                            });
+                        });
+                    })();
+                </script>
+                {% else %}
+                <div class="empty-state">
+                    <p>📭 尚未生成博客</p>
+                    <p>切换到「论文信息」标签页，选择风格后点击「✨ 生成博客」</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ========== 右侧面板 ========== -->
+        <aside class="sidebar">
+            <!-- 笔记面板 -->
+            <div class="sidebar-panel notes-panel">
+                <div class="panel-header" onclick="togglePanel('notes-body')">
+                    <h3>📝 笔记</h3>
+                    <span class="panel-toggle">▼</span>
+                </div>
+                <div class="panel-body" id="notes-body">
+                    <div class="note-editor">
+                        <textarea id="note-content" placeholder="写笔记...（支持 Markdown）" rows="3"></textarea>
+                        <div class="note-editor-row">
+                            <input type="text" id="note-tags" placeholder="标签（逗号分隔）">
+                            <button class="btn btn-primary btn-sm" onclick="saveNote()">💾 保存</button>
+                        </div>
+                        <div id="note-status" class="note-status"></div>
+                    </div>
+                    <div class="notes-list-mini" id="obsidian-notes">
+                        {% for note in obsidian_notes %}
+                        <div class="note-item">
+                            <span class="note-item-title">{{ note.title[:30] }}</span>
+                            <span class="note-item-date">{{ note.modified }}</span>
+                        </div>
+                        {% else %}
+                        <p class="no-notes">暂无笔记</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 聊天面板 -->
+            <div class="sidebar-panel chat-panel">
+                <div class="panel-header" onclick="togglePanel('chat-body')">
+                    <h3>💬 AI 问答</h3>
+                    <span class="panel-toggle">▼</span>
+                </div>
+                <div class="panel-body" id="chat-body">
+                    <div class="chat-hint" id="chat-hint">
+                        选中博客或论文中的任意文字，在此提问。AI 会结合论文上下文回答。
+                    </div>
+                    <div class="chat-messages" id="chat-messages"></div>
+                    <div class="chat-input-row">
+                        <textarea id="chat-input" placeholder="输入问题...（可先选中博客文字，或点击 PDF 页面的 📋引用此页 按钮）" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askQuestion({{ paper.item_id }})}"></textarea>
+                        <button class="btn btn-primary btn-sm" onclick="askQuestion({{ paper.item_id }})">发送</button>
+                    </div>
+                    <div class="chat-selected" id="chat-selected"></div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <footer class="footer">
+        <p>笔记存储: Obsidian Vault/文献/ | DeepSeek AI 驱动</p>
+    </footer>
+
+    <script>
+        // ==================== 全局状态 ====================
+        let chatHistory = [];
+        let selectedPaperText = '';
+        let currentTags = [];
+
+        // 监听文本选择（选中博客中的文字自动进入聊天缓冲区）
+        document.addEventListener('mouseup', () => {
+            setTimeout(() => {
+                const sel = window.getSelection();
+                const text = (sel || '').toString().trim();
+                if (text.length > 10 && text.length < 3000) {
+                    selectedPaperText = text;
+                    document.getElementById('chat-selected').innerHTML =
+                        '<span class="selected-label">📌 已选中:</span> ' + text.substring(0, 150) + (text.length > 150 ? '...' : '');
+                }
+            }, 50);
+        });
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            {% if blog_content %}switchTab('blog');{% endif %}
+            loadSuggestedTags();
+            {% if paper.pdf_path %}
+            // 自动加载 PDF（PDF.js 渲染，文字可直接选中）
+            loadPdf();
+            {% endif %}
+        });
+
+        // ==================== Tab 切换 ====================
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            document.getElementById('content-' + name).classList.add('active');
+        }
+
+        function togglePanel(id) {
+            const body = document.getElementById(id);
+            body.classList.toggle('collapsed');
+        }
+
+        // ==================== 标签 ====================
+        async function loadSuggestedTags() {
+            try {
+                const resp = await fetch('/api/paper/{{ paper.item_id }}/tags');
+                const data = await resp.json();
+                if (data.tags) {
+                    currentTags = data.tags;
+                    renderTags();
+                }
+            } catch (e) {
+                document.getElementById('tags-container').innerHTML = '';
+            }
+        }
+
+        function renderTags() {
+            const container = document.getElementById('tags-container');
+            container.innerHTML = currentTags.map((t, i) =>
+                `<span class="tag-chip">#${t} <span class="tag-remove" onclick="removeTag(${i})">×</span></span>`
+            ).join('');
+        }
+
+        function addTag() {
+            const input = document.getElementById('tag-input');
+            const tag = input.value.trim();
+            if (tag) {
+                currentTags.push(tag);
+                input.value = '';
+                renderTags();
+            }
+        }
+
+        function removeTag(idx) {
+            currentTags.splice(idx, 1);
+            renderTags();
+        }
+
+        // ==================== 博客生成 ====================
+        async function generateBlog(itemId) {
+            const btn = document.getElementById('generate-btn');
+            const status = document.getElementById('action-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ 生成中...';
+            status.innerHTML = '<span class="status-loading">⏳ 正在提取论文图片 + 调用 DeepSeek 深度分析，约 60-120 秒...</span>';
+
+            try {
+                const style = document.querySelector('input[name="blog-style"]:checked')?.value || 'academic';
+                const resp = await fetch(`/paper/${itemId}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ style })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    status.innerHTML = data.cached
+                        ? '<span class="status-success">✅ 已从缓存加载</span>'
+                        : '<span class="status-success">✅ 生成成功！刷新中...</span>';
+                    setTimeout(() => location.reload(), 600);
+                } else {
+                    status.innerHTML = `<span class="status-error">❌ ${data.error || '失败'}</span>`;
+                    btn.disabled = false;
+                    btn.textContent = '✨ 重试生成';
+                }
+            } catch (e) {
+                status.innerHTML = `<span class="status-error">❌ ${e.message}</span>`;
+                btn.disabled = false;
+                btn.textContent = '✨ 重试生成';
+            }
+        }
+
+        // ==================== 精读笔记 ====================
+        async function generateQuickNote(itemId) {
+            const btn = document.getElementById('quick-note-btn');
+            const status = document.getElementById('action-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ 生成笔记...';
+            status.innerHTML = '<span class="status-loading">AI 正在提取关键信息，生成结构化笔记...</span>';
+
+            try {
+                const resp = await fetch(`/api/paper/${itemId}/quick-note`, { method: 'POST' });
+                const data = await resp.json();
+                if (data.success) {
+                    status.innerHTML = `<span class="status-success">✅ 笔记已保存到 Obsidian: ${data.filepath.split('/').pop()}</span>`;
+                } else {
+                    status.innerHTML = `<span class="status-error">❌ ${data.error}</span>`;
+                }
+                btn.disabled = false;
+                btn.textContent = '📝 生成精读笔记';
+            } catch (e) {
+                status.innerHTML = `<span class="status-error">❌ ${e.message}</span>`;
+                btn.disabled = false;
+                btn.textContent = '📝 生成精读笔记';
+            }
+        }
+
+        // ==================== 笔记保存 ====================
+        async function saveNote() {
+            const content = document.getElementById('note-content').value.trim();
+            const tagsStr = document.getElementById('note-tags').value.trim();
+            const status = document.getElementById('note-status');
+            if (!content) { status.innerHTML = '<span class="status-error">请填写内容</span>'; return; }
+
+            const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : currentTags;
+            status.innerHTML = '<span class="status-loading">保存中...</span>';
+
+            try {
+                const resp = await fetch('/api/notes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        paper_title: {{ paper.title | tojson | safe }},
+                        paper_authors: {{ paper.authors | tojson | safe }},
+                        content, tags
+                    })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    status.innerHTML = '<span class="status-success">✅ 已保存</span>';
+                    document.getElementById('note-content').value = '';
+                } else {
+                    status.innerHTML = `<span class="status-error">${data.error}</span>`;
+                }
+            } catch (e) {
+                status.innerHTML = `<span class="status-error">${e.message}</span>`;
+            }
+        }
+
+        // ==================== PDF 查看器（iframe 浏览器原生） ====================
+        function togglePdfViewer() {
+            const body = document.getElementById('pdf-viewer-body');
+            const btn = document.getElementById('pdf-toggle-btn');
+            if (body.classList.contains('collapsed')) {
+                body.classList.remove('collapsed');
+                btn.textContent = '收起';
+            } else {
+                body.classList.add('collapsed');
+                btn.textContent = '展开查看';
+            }
+        }
+
+        // ==================== AI 问答 ====================
+        async function askQuestion(itemId) {
+            const input = document.getElementById('chat-input');
+            const question = input.value.trim();
+            if (!question) return;
+
+            const msgContainer = document.getElementById('chat-messages');
+            document.getElementById('chat-hint').style.display = 'none';
+
+            // 显示用户问题
+            msgContainer.innerHTML += `<div class="chat-msg user-msg"><strong>你:</strong> ${escapeHtml(question)}</div>`;
+            input.value = '';
+
+            // 加载中
+            const loadingId = 'loading-' + Date.now();
+            msgContainer.innerHTML += `<div class="chat-msg ai-msg" id="${loadingId}"><strong>AI:</strong> ⏳ 思考中...</div>`;
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+
+            try {
+                const blogContent = document.getElementById('blog-content')?.innerText || '';
+                const resp = await fetch(`/api/paper/${itemId}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        selected_text: selectedPaperText,
+                        question,
+                        blog_content: blogContent,
+                        history: chatHistory,
+                    })
+                });
+                const data = await resp.json();
+
+                document.getElementById(loadingId).innerHTML =
+                    `<strong>AI:</strong> ${marked.parse(data.answer || '无回复')}`;
+
+                chatHistory.push({ role: 'user', content: question });
+                chatHistory.push({ role: 'assistant', content: data.answer });
+                msgContainer.scrollTop = msgContainer.scrollHeight;
+            } catch (e) {
+                document.getElementById(loadingId).innerHTML =
+                    `<strong>AI:</strong> ❌ 请求失败: ${e.message}`;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

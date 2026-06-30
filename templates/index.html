@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 alphaXiv-Local — 论文博客</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <h1 class="logo"><a href="/">📚 alphaXiv-Local</a></h1>
+            <span class="subtitle">Zotero 论文 → 博客</span>
+            <nav class="nav">
+                <a href="/" class="nav-link active">博客</a>
+                <a href="/notes" class="nav-link">笔记 ({{ notes_count }})</a>
+            </nav>
+        </div>
+    </header>
+
+    <main class="main">
+        <!-- 搜索栏 -->
+        <div class="toolbar">
+            <form method="GET" action="/" class="search-form">
+                <input type="text" name="q" placeholder="搜索论文标题 / 作者 / 摘要..." value="{{ query }}" class="search-input">
+                <button type="submit" class="btn btn-primary">搜索</button>
+                {% if query %}<a href="/" class="btn btn-ghost">清除</a>{% endif %}
+            </form>
+            <div class="collection-filter">
+                <select onchange="location = this.value ? '/?collection=' + this.value : '/'" class="select">
+                    <option value="">📂 全部分类</option>
+                    {% for col in collections %}
+                    <option value="{{ col.id }}" {% if current_collection == col.id|string %}selected{% endif %}>
+                        {{ col.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <span class="count-badge">{{ total }} 篇论文</span>
+        </div>
+
+        <!-- 论文列表 -->
+        <div class="paper-grid">
+            {% for paper in papers %}
+            <article class="paper-card">
+                <div class="paper-card-header">
+                    <span class="paper-type">{{ paper.type }}</span>
+                    {% if paper.has_blog %}
+                    <span class="badge badge-blog">📝 已有博客</span>
+                    {% endif %}
+                </div>
+                <h3 class="paper-title">
+                    <a href="/paper/{{ paper.item_id }}">{{ paper.title }}</a>
+                </h3>
+                <p class="paper-authors">{{ paper.authors[:3] | join(', ') }}{% if paper.authors | length > 3 %} 等{% endif %}</p>
+                <div class="paper-meta">
+                    {% if paper.publication %}<span>📰 {{ paper.publication }}</span>{% endif %}
+                    {% if paper.date %}<span>📅 {{ paper.date }}</span>{% endif %}
+                </div>
+                <p class="paper-abstract">{{ paper.abstract[:200] }}{% if paper.abstract | length > 200 %}...{% endif %}</p>
+                <div class="paper-card-footer">
+                    <a href="/paper/{{ paper.item_id }}" class="btn btn-sm">
+                        {% if paper.has_blog %}📖 阅读博客{% else %}✨ 生成博客{% endif %}
+                    </a>
+                    {% if paper.notes %}<span class="note-indicator">📌 {{ paper.notes | length }} 条笔记</span>{% endif %}
+                </div>
+            </article>
+            {% else %}
+            <div class="empty-state">
+                <p>没有找到论文。{% if query %}尝试其他搜索词。{% endif %}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+
+    <footer class="footer">
+        <p>Powered by Zotero + Anthropic Claude | 仿 alphaXiv.org</p>
+    </footer>
+</body>
+</html>
